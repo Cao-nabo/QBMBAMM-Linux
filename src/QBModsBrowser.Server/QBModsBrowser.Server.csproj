@@ -1,12 +1,10 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk.Web">
 
   <PropertyGroup>
-    <TargetFramework>net10.0-windows</TargetFramework>
-    <OutputType>WinExe</OutputType>
-    <UseWindowsForms>true</UseWindowsForms>
+    <TargetFramework>net10.0</TargetFramework>
+    <OutputType>Exe</OutputType>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <ApplicationIcon>..\..\QBSSMB4.ico</ApplicationIcon>
     <!-- Published exe and process name used throughout the build script. -->
     <AssemblyName>QBMBAMM</AssemblyName>
     <!-- Single source of truth for the app version; bumped by bump or publish helpers/bump-version.ps1 (bump-minor.bat / bump-patch.bat). -->
@@ -29,11 +27,18 @@
   <!--
     Builds the production Tailwind CSS bundle before compilation so wwwroot/tailwind.css
     exists when dotnet build / dotnet publish embeds static assets.
-    Uses the standalone Tailwind CLI binary (tools/tailwindcss.exe) — no Node.js or npm required.
+    Uses the standalone Tailwind CLI binary — no Node.js or npm required.
+    Linux fork note: original uses tools/tailwindcss.exe (Windows-only); this picks the
+    matching Linux standalone binary (tools/tailwindcss-linux-x64) on non-Windows hosts.
   -->
-  <Target Name="BuildTailwindCSS" BeforeTargets="Build">
+  <Target Name="BuildTailwindCSS" BeforeTargets="Build" Condition="'$(OS)' == 'Windows_NT'">
     <Exec Command="tools\tailwindcss.exe -i src\QBModsBrowser.Server\wwwroot\tailwind-input.css -o src\QBModsBrowser.Server\wwwroot\tailwind.css --minify"
           WorkingDirectory="$(MSBuildProjectDirectory)\..\..\" />
+  </Target>
+
+  <Target Name="BuildTailwindCSSLinux" BeforeTargets="Build" Condition="'$(OS)' != 'Windows_NT'">
+    <Exec Command="tools/tailwindcss-linux-x64 -i src/QBModsBrowser.Server/wwwroot/tailwind-input.css -o src/QBModsBrowser.Server/wwwroot/tailwind.css --minify"
+          WorkingDirectory="$(MSBuildProjectDirectory)/../.." />
   </Target>
 
   <!--

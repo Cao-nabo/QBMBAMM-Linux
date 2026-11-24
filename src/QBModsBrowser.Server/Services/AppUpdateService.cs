@@ -4,7 +4,6 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Reflection;
 using System.Text.Json;
-using System.Windows.Forms;
 using Serilog;
 using ILogger = Serilog.ILogger;
 
@@ -182,6 +181,16 @@ rmdir /s /q ""%SRC%""
         _installing = true;
         try
         {
+            // Linux fork note: the self-update mechanism below writes and spawns a Windows .bat
+            // file (UpdateBatTemplate) to replace the running exe, which has no Linux equivalent.
+            // Rather than build a parallel shell-script updater, auto-update is disabled here —
+            // pull and rebuild manually instead.
+            if (!OperatingSystem.IsWindows())
+            {
+                _log.Warning("Auto-update is not supported on this Linux build; pull and rebuild from source instead");
+                return false;
+            }
+
             var status = await GetStatusAsync();
             if (!status.UpdateAvailable || string.IsNullOrEmpty(status.AssetUrl))
             {
@@ -227,12 +236,12 @@ rmdir /s /q ""%SRC%""
                 WindowStyle = ProcessWindowStyle.Minimized,
             });
 
-            // Same pattern as AppController.Shutdown: let the HTTP response return, then exit the WinForms message loop
-            // so Program.cs can clean up the tray icon. The bat is already waiting for this PID to exit.
+            // Same pattern as AppController.Shutdown: let the HTTP response return, then signal
+            // shutdown. The bat is already waiting for this PID to exit.
             _ = Task.Run(async () =>
             {
                 await Task.Delay(500);
-                Application.Exit();
+                AppLifecycle.RequestShutdown?.Invoke();
             });
             return true;
         }

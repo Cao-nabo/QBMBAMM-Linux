@@ -47,3 +47,6 @@ src/QBModsBrowser.Server/wwwroot/tailwind.css
 
 ## Standalone Tailwind CLI binary — allow this one exe despite the *.exe rule above.
 !tools/tailwindcss.exe
+
+## Linux fork: standalone Tailwind CLI binary for non-Windows builds (same role as the .exe above).
+!tools/tailwindcss-linux-x64

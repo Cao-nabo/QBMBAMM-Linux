@@ -1,18 +1,20 @@
 using System.Net.Http;
 using System.Text.Json;
-using System.Windows.Forms;
 using System.Threading;
 using QBModsBrowser.Scraper.Storage;
 using QBModsBrowser.Server.Models;
 using QBModsBrowser.Server.Services;
 using QBModsBrowser.Server.Utilities;
+using Microsoft.Extensions.Hosting;
+using QBModsBrowser.Server;
 using Serilog;
 using Serilog.Core;
 using Serilog.Events;
 using Serilog.Formatting.Compact;
 
-// Entry point for the system-tray-hosted ASP.NET Core server.
-// [STAThread] is required for Windows Forms (NotifyIcon/ContextMenuStrip).
+// Entry point for the ASP.NET Core server.
+// Linux fork note: the original WinForms system-tray host was dropped (see AppLifecycle.cs);
+// this runs as a plain console/background process instead.
 internal static class Program
 {
     // Fixed listen URL; single-instance check and tray icon both use this.
@@ -33,14 +35,8 @@ internal static class Program
         return start;
     }
 
-    [STAThread]
     static async Task Main(string[] args)
     {
-        // Bootstrap Windows Forms before any UI objects are created.
-        Application.SetHighDpiMode(HighDpiMode.SystemAware);
-        Application.EnableVisualStyles();
-        Application.SetCompatibleTextRenderingDefault(false);
-
         const string SingleInstanceMutexName = @"Local\QBModsBrowser.Server.SingleInstance";
         using var singleInstanceMutex = new Mutex(initiallyOwned: true, name: SingleInstanceMutexName, createdNew: out bool isPrimaryInstance);
 
@@ -246,8 +242,12 @@ internal static class Program
         // Fallback to index.html for SPA-like navigation
         app.MapFallbackToFile("index.html");
 
-        // Build the system tray icon; it lives until the user clicks Exit.
-        using var tray = new TrayApp(AppUrl);
+        // Linux fork note: wire the shutdown signal (menu Exit / /api/app/shutdown / auto-updater)
+        // to the host's own lifetime instead of the removed WinForms tray/Application.Exit().
+        var appLifetime = app.Services.GetRequiredService<IHostApplicationLifetime>();
+        var shutdownRequested = new TaskCompletionSource();
+        appLifetime.ApplicationStopping.Register(() => shutdownRequested.TrySetResult());
+        AppLifecycle.RequestShutdown = () => appLifetime.StopApplication();
 
         // Resolve the exact Chromium path this Playwright version expects so IsInstalled() is
         // precise from the first status poll, without waiting for a scrape attempt to fail.
@@ -305,18 +305,13 @@ internal static class Program
             }
         });
 
-        // Start the web host without blocking; the WinForms pump below keeps the process alive.
+        // Start the web host without blocking; we block on shutdownRequested below instead.
         await app.StartAsync();
+        Log.Information("QBMBAMM running at {Url} (Ctrl+C to stop)", AppUrl);
 
-        // Block on the WinForms message loop; returns when Application.Exit() is called
-        // (either via the tray Exit menu or the /api/app/shutdown endpoint).
-        tray.Run();
-
-        // Explicitly dispose the tray icon here rather than relying on the using block:
-        // Environment.Exit() below bypasses using-block disposal, so the icon would ghost
-        // if we didn't hide it first. (The menu Exit handler already hides it itself, so
-        // this is a no-op in that path — it's the API-triggered shutdown that needs it.)
-        tray.Dispose();
+        // Block until shutdown is requested (Ctrl+C/SIGTERM via the host's own handling,
+        // the /api/app/shutdown endpoint, or the auto-updater) — mirrors the old tray.Run() block.
+        await shutdownRequested.Task;
 
         // Force-exit immediately; app.StopAsync() can block for 30+ seconds waiting for hosted
         // background services to drain, which is unacceptable for a desktop tray app.

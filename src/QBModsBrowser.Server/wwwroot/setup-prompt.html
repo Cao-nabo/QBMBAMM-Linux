@@ -69,12 +69,18 @@
 
             <div class="space-y-2">
                 <label class="text-[10px] text-gray-400 block">Mods Folder Path</label>
-                <input type="text" x-model="managerConfig.modsPath"
-                       @keydown.enter="saveSetupModsPath()"
-                       @input="setupPathError = ''"
-                       class="w-full bg-surface-alt border rounded px-3 py-2 text-sm text-gray-200 focus:outline-none transition"
-                       :class="setupPathError ? 'border-red-500 focus:border-red-400' : 'border-gray-600 focus:border-indigo-500'"
-                       placeholder="C:\Program Files (x86)\Fractal Softworks\Starsector\mods" />
+                <div class="flex gap-2">
+                    <input type="text" x-model="managerConfig.modsPath"
+                           @keydown.enter="saveSetupModsPath()"
+                           @input="setupPathError = ''"
+                           class="flex-1 min-w-0 bg-surface-alt border rounded px-3 py-2 text-sm text-gray-200 focus:outline-none transition"
+                           :class="setupPathError ? 'border-red-500 focus:border-red-400' : 'border-gray-600 focus:border-indigo-500'"
+                           placeholder="/home/you/Starsector/mods" />
+                    <button type="button" @click="openFolderBrowser('modsPath')"
+                            class="px-3 py-2 bg-surface-raised hover:bg-gray-600 text-gray-200 rounded text-sm font-medium transition shrink-0">
+                        Browse
+                    </button>
+                </div>
                 <p x-show="setupPathError" x-text="setupPathError" class="text-[11px] text-red-400"></p>
             </div>
             <button @click="saveSetupModsPath()"

@@ -119,7 +119,11 @@
                                 <div class="flex gap-2">
                                     <input type="text" x-model="managerConfig.modsPath"
                                         class="flex-1 bg-surface border border-gray-600 rounded px-2 py-1.5 text-sm text-gray-200"
-                                        placeholder="D:\GAMES\Starsector\mods">
+                                        placeholder="/home/you/Starsector/mods">
+                                    <button @click="openFolderBrowser('modsPath')"
+                                        class="px-3 py-1.5 bg-surface-raised hover:bg-gray-600 text-gray-200 rounded text-xs font-medium transition">
+                                        Browse
+                                    </button>
                                     <button @click="saveManagerConfig()"
                                         class="px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded text-xs font-medium transition">
                                         Save

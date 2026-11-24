@@ -57,6 +57,78 @@ public class ModManagerController : ControllerBase
         return Ok(new { exists });
     }
 
+    // Linux fork addition: lists subdirectories of the given path so the frontend can render
+    // a navigable folder picker. There's no native OS file dialog available to a browser-hosted
+    // UI, so this is the "file picker" — browse the server's filesystem one level at a time.
+    [HttpGet("browse-folders")]
+    public IActionResult BrowseFolders([FromQuery] string? path)
+    {
+        var current = !string.IsNullOrWhiteSpace(path) && Directory.Exists(path)
+            ? Path.GetFullPath(path)
+            : NearestExistingAncestor(_config.ModsPath)
+                ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+
+        List<object> folders;
+        try
+        {
+            folders = Directory.GetDirectories(current)
+                .Select(d => new { name = Path.GetFileName(d), path = d })
+                .OrderBy(d => d.name, StringComparer.OrdinalIgnoreCase)
+                .Cast<object>()
+                .ToList();
+        }
+        catch (UnauthorizedAccessException)
+        {
+            folders = [];
+        }
+
+        return Ok(new
+        {
+            path = current,
+            parent = Directory.GetParent(current)?.FullName,
+            folders,
+            shortcuts = GetFolderShortcuts()
+        });
+    }
+
+    // Walks up from the given path until it finds a folder that actually exists, so the picker
+    // opens somewhere useful even if the configured/default mods path doesn't exist yet.
+    private static string? NearestExistingAncestor(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return null;
+        try
+        {
+            var dir = new DirectoryInfo(Path.GetFullPath(path));
+            while (dir != null && !dir.Exists) dir = dir.Parent;
+            return dir?.FullName;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    // One-click jumps to the install locations Starsector actually ships to on Linux (official
+    // installer, and both common Steam library layouts) plus the home folder. Only existing
+    // paths are offered so the row doesn't fill with dead links.
+    private static List<object> GetFolderShortcuts()
+    {
+        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        var candidates = new (string Label, string Path)[]
+        {
+            ("Home", home),
+            ("Starsector (standalone)", Path.Combine(home, "Starsector", "mods")),
+            ("Steam (~/.local/share)", Path.Combine(home, ".local", "share", "Steam", "steamapps", "common", "Starsector", "mods")),
+            ("Steam (~/.steam)", Path.Combine(home, ".steam", "steam", "steamapps", "common", "Starsector", "mods")),
+        };
+
+        return candidates
+            .Where(c => Directory.Exists(c.Path))
+            .Select(c => new { label = c.Label, path = c.Path })
+            .Cast<object>()
+            .ToList();
+    }
+
     // --- Game Launcher ---
 
     // Checks whether starsector.exe exists one folder above the configured mods path.

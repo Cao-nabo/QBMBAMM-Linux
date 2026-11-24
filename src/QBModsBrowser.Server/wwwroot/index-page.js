@@ -1,5 +1,7 @@
-// Typical Windows Starsector mods folder; keep in sync with ManagerConfig.DefaultModsPath on the server.
-const QB_DEFAULT_MODS_PATH = String.raw`C:\Program Files (x86)\Fractal Softworks\Starsector\mods`;
+// Synchronous fallback used only before loadManagerConfig() returns the server's real default
+// (which is OS-aware — see ManagerConfig.DefaultModsPath). Linux fork note: points at the
+// official Linux installer's default location instead of the Windows path.
+const QB_DEFAULT_MODS_PATH = '~/Starsector/mods';
 
 // Provides Alpine state and actions for the mods list page.
 function modsApp() {
@@ -48,6 +50,8 @@ function modsApp() {
         showSetupPrompt: false,
         // Validation error shown in the setup prompt when the entered path does not exist.
         setupPathError: '',
+        // Linux fork addition: server-filesystem folder picker modal state (see folder-browser.js).
+        folderBrowser: { open: false, path: '', parent: null, folders: [], shortcuts: [], targetField: '', error: '' },
         isExtracting: false,
         extractFeedbackMessage: '',
         extractFeedbackTone: '',
@@ -68,6 +72,7 @@ function modsApp() {
             await this.loadControlPanelTemplate();
             await this.loadInstallsPanelTemplate();
             await this.loadSetupPromptTemplate();
+            await this.loadFolderBrowserTemplate();
             this.loadFilters();
             const qs = new URLSearchParams(window.location.search);
             if (qs.has('search')) {
@@ -365,6 +370,7 @@ function modsApp() {
         ...buildManagerMethods(),
         ...buildModSummaryMethods(),
         ...buildModProfileMethods(),
-        ...buildDependencyMethods()
+        ...buildDependencyMethods(),
+        ...buildFolderBrowserMethods()
     };
 }

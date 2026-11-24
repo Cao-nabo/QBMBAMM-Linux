@@ -1,6 +1,7 @@
 using System.Net.Http;
 using System.Text.Json;
 using System.Threading;
+using Microsoft.AspNetCore.Connections;
 using QBModsBrowser.Scraper.Storage;
 using QBModsBrowser.Server.Models;
 using QBModsBrowser.Server.Services;
@@ -48,7 +49,18 @@ internal static class Program
             if (!tookOver)
             {
                 // Same or older version — just (re)open the browser as before.
-                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(AppUrl) { UseShellExecute = true });
+                // Linux fork note: guarded with try/catch (unlike upstream) because a failed
+                // relaunch here used to crash the whole process silently before Serilog is even
+                // configured — with Terminal=false in the desktop launcher, that looked like
+                // "nothing happens" when double-clicking the icon while already running.
+                try
+                {
+                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(AppUrl) { UseShellExecute = true });
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($"Could not open browser at {AppUrl}: {ex.Message}");
+                }
                 return;
             }
             // We now own the mutex; fall through to start the server normally.
@@ -306,7 +318,29 @@ internal static class Program
         });
 
         // Start the web host without blocking; we block on shutdownRequested below instead.
-        await app.StartAsync();
+        // Linux fork note: the mutex-based single-instance check above isn't the only guard —
+        // if it somehow misses an already-running instance (observed after waking from sleep:
+        // the old process can end up holding the port with its mutex state inconsistent), Kestrel
+        // fails to bind and this used to be an unhandled exception that crashed silently under
+        // Terminal=false. Fall back to the same "already running" behavior instead of crashing.
+        try
+        {
+            await app.StartAsync();
+        }
+        catch (IOException ex) when (ex.InnerException is AddressInUseException)
+        {
+            Log.Warning(ex, "Port {Url} is already in use by another instance; opening it instead", AppUrl);
+            try
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(AppUrl) { UseShellExecute = true });
+            }
+            catch (Exception openEx)
+            {
+                Console.Error.WriteLine($"Could not open browser at {AppUrl}: {openEx.Message}");
+            }
+            Log.CloseAndFlush();
+            return;
+        }
         Log.Information("QBMBAMM running at {Url} (Ctrl+C to stop)", AppUrl);
 
         // Block until shutdown is requested (Ctrl+C/SIGTERM via the host's own handling,
